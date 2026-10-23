@@ -28,9 +28,13 @@ public partial class Bai05 : Form
             lvFiles.Items.Clear();
 
             var directory = new DirectoryInfo(dialog.SelectedPath);
-            foreach (FileInfo file in directory.GetFiles())
+            // Liệt kê file trong thư mục đã chọn và toàn bộ thư mục con.
+            foreach (FileInfo file in directory.GetFiles("*", SearchOption.AllDirectories)
+                         .OrderBy(file => file.FullName, StringComparer.OrdinalIgnoreCase))
             {
-                var item = new ListViewItem(file.Name);
+                // Hiện đường dẫn tương đối để phân biệt các file trùng tên ở thư mục con.
+                var relativePath = Path.GetRelativePath(directory.FullName, file.FullName);
+                var item = new ListViewItem(relativePath);
                 item.SubItems.Add(file.Length.ToString("N0"));
                 item.SubItems.Add(file.CreationTime.ToString("dd/MM/yyyy HH:mm:ss"));
                 item.SubItems.Add(file.Extension);
