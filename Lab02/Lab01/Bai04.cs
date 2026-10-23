@@ -1,181 +1,130 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Linq;
+using System.Globalization;
+using System.IO;
 using System.Runtime.Serialization.Formatters.Binary;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Forms;
 
-namespace Lab01
+namespace Lab01;
+
+public partial class Bai04 : Form
 {
-    public partial class Bai04 : Form
+    private readonly string inputFile = Path.Combine(AppContext.BaseDirectory, "input.txt");
+    private readonly string outputFile = Path.Combine(AppContext.BaseDirectory, "output.txt");
+    private readonly List<Student> students = new();
+
+    public Bai04()
     {
-        List<Student> students = new List<Student>();
-        int currentIndex = 0;
-        string inputFile = "input4.txt";
-        string outputFile = "output4.txt";
-        public Bai04()
+        InitializeComponent();
+    }
+
+    private void btnAdd_Click(object sender, EventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(txtMSSV.Text) ||
+            string.IsNullOrWhiteSpace(txtHoTen.Text) ||
+            string.IsNullOrWhiteSpace(txtDienThoai.Text))
         {
-            InitializeComponent();
-        }
-        private void btnAdd_Click(object sender, EventArgs e)
-        {
-            try
-            {
-                if (txtName.Text == "" || txtID.Text == "" || txtPhone.Text == "")
-                {
-                    MessageBox.Show("Vui lòng nhập đầy đủ thông tin!");
-                    return;
-                }
-                if (txtPhone.Text.Length != 10 || !txtPhone.Text.StartsWith("0"))
-                {
-                    MessageBox.Show("Số điện thoại phải có 10 chữ số và bắt đầu bằng 0!");
-                    return;
-                }
-                if (txtID.Text.Length != 8)
-                {
-                    MessageBox.Show("MSSV phải có 8 chữ số!");
-                    return;
-                }
-                float c1 = float.Parse(txtCourse1.Text);
-                float c2 = float.Parse(txtCourse2.Text);
-                float c3 = float.Parse(txtCourse3.Text);
-                if (c1 < 0 || c1 > 10 || c2 < 0 || c2 > 10 || c3 < 0 || c3 > 10)
-                {
-                    MessageBox.Show("Điểm phải nằm trong khoảng 0 - 10!");
-                    return;
-                }
-                Student s = new Student()
-                {
-                    Name = txtName.Text,
-                    MSSV = txtID.Text,
-                    Phone = txtPhone.Text,
-                    Course1 = c1,
-                    Course2 = c2,
-                    Course3 = c3
-                };
-                s.CalculateAverage();
-                students.Add(s);
-                listBoxStudents.Items.Add($"{s.Name} - {s.MSSV} - TB: {s.Average:F2}");
-                MessageBox.Show("Thêm sinh viên thành công!");
-                ClearInputs();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Lỗi khi thêm sinh viên: " + ex.Message);
-            }
+            MessageBox.Show("Nhập MSSV, họ tên và điện thoại.", "Thiếu thông tin");
+            return;
         }
 
-        private void btnWriteFile_Click(object sender, EventArgs e)
+        if (!TryReadScore(txtDiemToan.Text, out float diemToan) ||
+            !TryReadScore(txtDiemVan.Text, out float diemVan) ||
+            diemToan is < 0 or > 10 || diemVan is < 0 or > 10)
         {
-            try
-            {
-                using (FileStream fs = new FileStream(inputFile, FileMode.Create))
-                {
+            MessageBox.Show("Điểm Toán và Văn phải là số từ 0 đến 10.", "Dữ liệu không hợp lệ");
+            return;
+        }
+
+        students.Add(new Student
+        {
+            MSSV = txtMSSV.Text.Trim(),
+            HoTen = txtHoTen.Text.Trim(),
+            DienThoai = txtDienThoai.Text.Trim(),
+            DiemToan = diemToan,
+            DiemVan = diemVan
+        });
+
+        listStudents.Items.Add($"{txtMSSV.Text.Trim()} - {txtHoTen.Text.Trim()}");
+        txtMSSV.Clear();
+        txtHoTen.Clear();
+        txtDienThoai.Clear();
+        txtDiemToan.Clear();
+        txtDiemVan.Clear();
+        txtMSSV.Focus();
+    }
+
+    private void btnWriteFile_Click(object sender, EventArgs e)
+    {
+        if (students.Count == 0)
+        {
+            MessageBox.Show("Hãy nhập ít nhất một học viên trước khi ghi file.", "Chưa có dữ liệu");
+            return;
+        }
+
+        try
+        {
+            Student[] studentArray = students.ToArray();
+            using var stream = new FileStream(inputFile, FileMode.Create, FileAccess.Write);
 #pragma warning disable SYSLIB0011
-                    BinaryFormatter bf = new BinaryFormatter();
-                    bf.Serialize(fs, students);
+            var formatter = new BinaryFormatter();
+            formatter.Serialize(stream, studentArray);
 #pragma warning restore SYSLIB0011
-                }
-                MessageBox.Show("Ghi dữ liệu xuống file thành công!");
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Lỗi khi ghi file: " + ex.Message);
-            }
+            MessageBox.Show("Đã ghi mảng học viên dạng nhị phân vào input.txt.", "Thông báo");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Runtime.Serialization.SerializationException)
+        {
+            MessageBox.Show($"Không thể ghi input.txt: {ex.Message}", "Lỗi");
+        }
+    }
+
+    private void btnReadFile_Click(object sender, EventArgs e)
+    {
+        if (!File.Exists(inputFile))
+        {
+            MessageBox.Show($"Không tìm thấy file: {inputFile}", "Lỗi");
+            return;
         }
 
-        private void btnReadFile_Click(object sender, EventArgs e)
+        try
         {
-            try
+            Student[] studentArray;
+            using (var stream = new FileStream(inputFile, FileMode.Open, FileAccess.Read))
             {
-                if (!File.Exists(inputFile))
-                {
-                    MessageBox.Show("Không tìm thấy file input4.txt!");
-                    return;
-                }
-
-                using (FileStream fs = new FileStream(inputFile, FileMode.Open))
-                {
 #pragma warning disable SYSLIB0011
-                    BinaryFormatter bf = new BinaryFormatter();
-                    students = (List<Student>)bf.Deserialize(fs);
+                var formatter = new BinaryFormatter();
+                studentArray = (Student[])formatter.Deserialize(stream);
 #pragma warning restore SYSLIB0011
-                }
-
-                using (StreamWriter sw = new StreamWriter(outputFile))
-                {
-                    foreach (var s in students)
-                    {
-                        s.CalculateAverage();
-                        sw.WriteLine($"{s.Name} - {s.MSSV} - TB: {s.Average:F2}");
-                    }
-                }
-
-                if (students.Count > 0)
-                {
-                    currentIndex = 0;
-                    DisplayStudent(students[currentIndex]);
-                }
-
-                MessageBox.Show("Đọc và ghi file thành công!");
             }
-            catch (Exception ex)
+
+            string[] outputLines = studentArray.Select(student =>
             {
-                MessageBox.Show("Lỗi khi đọc file: " + ex.Message);
-            }
-        }
-        private void DisplayStudent(Student s)
-        {
-            txtNameR.Text = s.Name;
-            txtIDR.Text = s.MSSV;
-            txtPhoneR.Text = s.Phone;
-            txtCourse1R.Text = s.Course1.ToString();
-            txtCourse2R.Text = s.Course2.ToString();
-            txtCourse3R.Text = s.Course3.ToString();
-            txtAverageR.Text = s.Average.ToString("F2");
-        }
+                student.CalculateAverage();
+                return $"MSSV: {student.MSSV} | Họ tên: {student.HoTen} | Điện thoại: {student.DienThoai} | " +
+                       $"Toán: {student.DiemToan:F1} | Văn: {student.DiemVan:F1} | ĐTB: {student.DTB:F2}";
+            }).ToArray();
 
-        private void btnBack_Click(object sender, EventArgs e)
-        {
-            if (students.Count == 0) return;
-            currentIndex = (currentIndex - 1 + students.Count) % students.Count;
-            DisplayStudent(students[currentIndex]);
+            File.WriteAllLines(outputFile, outputLines);
+            richResult.Lines = outputLines;
+            MessageBox.Show("Đã đọc mảng, tính điểm trung bình và ghi kết quả vào output.txt.", "Thông báo");
         }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Runtime.Serialization.SerializationException or InvalidCastException)
+        {
+            MessageBox.Show($"Không thể xử lý input.txt: {ex.Message}", "Lỗi");
+        }
+    }
 
-        private void btnNext_Click(object sender, EventArgs e)
-        {
-            if (students.Count == 0) return;
-            currentIndex = (currentIndex + 1) % students.Count;
-            DisplayStudent(students[currentIndex]);
-        }
-        private void ClearInputs()
-        {
-            txtName.Clear();
-            txtID.Clear();
-            txtPhone.Clear();
-            txtCourse1.Clear();
-            txtCourse2.Clear();
-            txtCourse3.Clear();
-        }
-        [Serializable]
-        public class Student
-        {
-            public string Name { get; set; }
-            public string MSSV { get; set; }
-            public string Phone { get; set; }
-            public float Course1 { get; set; }
-            public float Course2 { get; set; }
-            public float Course3 { get; set; }
-            public float Average { get; set; }
+    private static bool TryReadScore(string text, out float score) =>
+        float.TryParse(text, NumberStyles.Float, CultureInfo.CurrentCulture, out score) ||
+        float.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out score);
 
-            public void CalculateAverage()
-            {
-                Average = (Course1 + Course2 + Course3) / 3;
-            }
-        }
+    [Serializable]
+    public class Student
+    {
+        public string MSSV { get; set; } = "";
+        public string HoTen { get; set; } = "";
+        public string DienThoai { get; set; } = "";
+        public float DiemToan { get; set; }
+        public float DiemVan { get; set; }
+        public float DTB { get; set; }
+
+        public void CalculateAverage() => DTB = (DiemToan + DiemVan) / 2;
     }
 }

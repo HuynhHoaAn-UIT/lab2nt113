@@ -1,169 +1,163 @@
-﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using System.Windows.Forms;
+using System.Globalization;
+using System.IO;
 
-namespace Lab01
+namespace Lab01;
+
+public partial class Bai03 : Form
 {
-    public partial class Bai03 : Form
+    private readonly string inputFile = Path.Combine(AppContext.BaseDirectory, "input.txt");
+    private readonly string outputFile = Path.Combine(AppContext.BaseDirectory, "output.txt");
+
+    public Bai03()
     {
-        public Bai03()
-        {
-            InitializeComponent();
-        }
+        InitializeComponent();
+    }
 
-        private void btnReadfile_Click(object sender, EventArgs e)
+    private void btnReadfile_Click(object sender, EventArgs e)
+    {
+        try
         {
-            try
+            if (!File.Exists(inputFile))
             {
-                string inputPath = "input3.txt";
+                MessageBox.Show($"Không tìm thấy file: {inputFile}", "Lỗi");
+                return;
+            }
 
-                if (!File.Exists(inputPath))
+            richInput.Lines = File.ReadAllLines(inputFile);
+            richOutput.Clear();
+        }
+        catch (IOException ex)
+        {
+            MessageBox.Show($"Không thể đọc file: {ex.Message}", "Lỗi");
+        }
+    }
+
+    private void btnWriteFile_Click(object sender, EventArgs e)
+    {
+        try
+        {
+            if (!File.Exists(inputFile))
+            {
+                MessageBox.Show($"Không tìm thấy file: {inputFile}", "Lỗi");
+                return;
+            }
+
+            string[] expressions = File.ReadAllLines(inputFile);
+            var results = new List<string>();
+            for (int i = 0; i < expressions.Length; i++)
+            {
+                string expression = expressions[i].Trim();
+                if (expression.Length == 0)
+                    continue;
+
+                double result;
+                try
                 {
-                    MessageBox.Show("Không tìm thấy file input3.txt!");
-                    return;
+                    result = new ExpressionParser(expression).Parse();
                 }
-                string[] lines = File.ReadAllLines(inputPath);
-                richInput.Clear();
-                richInput.Lines = lines;
-                MessageBox.Show("Đọc file thành công!");
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Lỗi khi đọc file: " + ex.Message);
-            }
-        }
-        private void btnWriteFile_Click(object sender, EventArgs e)
-        {
-            try
-            {
-                string inputPath = "input3.txt";
-                string outputPath = "output3.txt";
-                if (!File.Exists(inputPath))
+                catch (FormatException ex)
                 {
-                    MessageBox.Show("Không tìm thấy file input3.txt!");
-                    return;
+                    throw new FormatException($"Dòng {i + 1}: {ex.Message}");
                 }
-                string[] lines = File.ReadAllLines(inputPath);
-                List<string> results = new List<string>();
-                foreach (string line in lines)
-                {
-                    string expr = line.Trim();
-                    if (expr == "") continue;
 
-                    double result = EvaluateExpression(expr);
-                    results.Add(expr + " = " + result);
-                }
-                File.WriteAllLines(outputPath, results);
-                richOutput.Lines = results.ToArray();
-                MessageBox.Show("Đã ghi kết quả xuống file output3.txt!");
+                results.Add($"{expression} = {result.ToString(CultureInfo.InvariantCulture)}");
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Lỗi khi ghi file: " + ex.Message);
-            }
-        }
-        private double EvaluateExpression(string expr)
-        {
-            try
-            {
-                List<string> tokens = Tokenize(expr);
-                Stack<double> values = new Stack<double>();
-                Stack<char> ops = new Stack<char>();
 
-                for (int i = 0; i < tokens.Count; i++)
-                {
-                    string token = tokens[i];
+            File.WriteAllLines(outputFile, results);
+            richInput.Lines = expressions;
+            richOutput.Lines = results.ToArray();
+            MessageBox.Show("Đã tính các biểu thức và ghi kết quả vào output.txt.", "Thông báo");
+        }
+        catch (Exception ex) when (ex is IOException or FormatException)
+        {
+            MessageBox.Show($"Không thể xử lý file: {ex.Message}", "Lỗi");
+        }
+    }
 
-                    if (double.TryParse(token, out double num))
-                    {
-                        values.Push(num);
-                    }
-                    else if (token == "(")
-                    {
-                        ops.Push('(');
-                    }
-                    else if (token == ")")
-                    {
-                        while (ops.Peek() != '(')
-                            values.Push(ApplyOp(ops.Pop(), values.Pop(), values.Pop()));
-                        ops.Pop();
-                    }
-                    else
-                    {
-                        char op = token[0];
-                        while (ops.Count > 0 && Precedence(ops.Peek()) >= Precedence(op))
-                            values.Push(ApplyOp(ops.Pop(), values.Pop(), values.Pop()));
-                        ops.Push(op);
-                    }
-                }
-                while (ops.Count > 0)
-                    values.Push(ApplyOp(ops.Pop(), values.Pop(), values.Pop()));
-                return values.Pop();
-            }
-            catch
-            {
-                return double.NaN;
-            }
-        }
-        private List<string> Tokenize(string expr)
-        {
-            List<string> tokens = new List<string>();
-            string num = "";
-            foreach (char c in expr)
-            {
-                if (char.IsDigit(c) || c == '.')
-                    num += c;
-                else if ("+-*/()".Contains(c))
-                {
-                    if (num != "")
-                    {
-                        tokens.Add(num);
-                        num = "";
-                    }
-                    tokens.Add(c.ToString());
-                }
-                else if (c == ' ')
-                {
-                    if (num != "")
-                    {
-                        tokens.Add(num);
-                        num = "";
-                    }
-                }
-            }
-            if (num != "")
-                tokens.Add(num);
+    private void btnExit_Click(object sender, EventArgs e)
+    {
+        Close();
+    }
 
-            return tokens;
-        }
-        private int Precedence(char op)
+    private sealed class ExpressionParser(string text)
+    {
+        private int position;
+
+        public double Parse()
         {
-            if (op == '+' || op == '-') return 1;
-            if (op == '*' || op == '/') return 2;
-            return 0;
+            double value = ParseExpression();
+            SkipWhitespace();
+            if (position != text.Length)
+                throw new FormatException($"Ký tự không hợp lệ tại vị trí {position + 1}.");
+            return value;
         }
-        private double ApplyOp(char op, double b, double a)
+
+        private double ParseExpression()
         {
-            switch (op)
+            double value = ParseTerm();
+            while (true)
             {
-                case '+': return a + b;
-                case '-': return a - b;
-                case '*': return a * b;
-                case '/': return b != 0 ? a / b : double.NaN;
-                default: return 0;
+                SkipWhitespace();
+                if (Consume('+')) value += ParseTerm();
+                else if (Consume('-')) value -= ParseTerm();
+                else return value;
             }
         }
 
-        private void btnExit_Click(object sender, EventArgs e)
+        private double ParseTerm()
         {
-            this.Close();
+            double value = ParseFactor();
+            while (true)
+            {
+                SkipWhitespace();
+                if (Consume('*')) value *= ParseFactor();
+                else if (Consume('/'))
+                {
+                    double divisor = ParseFactor();
+                    if (divisor == 0)
+                        throw new FormatException("Không thể chia cho 0.");
+                    value /= divisor;
+                }
+                else return value;
+            }
+        }
+
+        private double ParseFactor()
+        {
+            SkipWhitespace();
+            if (Consume('+')) return ParseFactor();
+            if (Consume('-')) return -ParseFactor();
+            if (Consume('('))
+            {
+                double value = ParseExpression();
+                SkipWhitespace();
+                if (!Consume(')'))
+                    throw new FormatException("Thiếu dấu ngoặc đóng.");
+                return value;
+            }
+
+            int start = position;
+            while (position < text.Length && (char.IsDigit(text[position]) || text[position] == '.'))
+                position++;
+
+            if (start == position || !double.TryParse(
+                    text[start..position], NumberStyles.Float, CultureInfo.InvariantCulture, out double number))
+                throw new FormatException($"Thiếu số hợp lệ tại vị trí {start + 1}.");
+            return number;
+        }
+
+        private bool Consume(char expected)
+        {
+            if (position >= text.Length || text[position] != expected)
+                return false;
+            position++;
+            return true;
+        }
+
+        private void SkipWhitespace()
+        {
+            while (position < text.Length && char.IsWhiteSpace(text[position]))
+                position++;
         }
     }
 }
-
